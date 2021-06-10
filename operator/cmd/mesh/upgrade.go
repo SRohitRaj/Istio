@@ -31,6 +31,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 
+	"istio.io/api/label"
 	"istio.io/istio/istioctl/pkg/clioptions"
 	"istio.io/istio/istioctl/pkg/install/k8sversion"
 	"istio.io/istio/istioctl/pkg/verifier"
@@ -41,6 +42,7 @@ import (
 	"istio.io/istio/operator/pkg/util"
 	"istio.io/istio/operator/pkg/util/clog"
 	pkgversion "istio.io/istio/operator/pkg/version"
+	"istio.io/istio/pkg/url"
 	"istio.io/pkg/log"
 )
 
@@ -172,6 +174,23 @@ func upgrade(rootArgs *rootArgs, args *upgradeArgs, l clog.Logger) (err error) {
 		return fmt.Errorf("failed to read the current Istio version, error: %v", err)
 	}
 
+	// Upgrade won't work, if the previous version of Istio is installed with revision
+	// Ref: https://github.com/istio/istio/issues/28566
+	pods, err := kubeClient.PodsForSelector(istioNamespace, "app=istiod")
+	if err != nil {
+		return fmt.Errorf("failed to fetch the existing istiod pod for checking revision, error: %v", err)
+	}
+	for _, pod := range pods.Items {
+		revision := pod.ObjectMeta.GetLabels()[label.IoIstioRev.Name]
+		// If --revision is not passed, istio.io/rev: default
+		if revision != "" && revision != "default" {
+			err = fmt.Errorf("can not upgrade because the previous version of Istio is installed with revision." +
+				"\nUse canary upgrades instead: " + url.CanaryUpgrades)
+		}
+	}
+	if err != nil && !args.force {
+		return err
+	}
 	// Check if the upgrade currentVersion -> targetVersion is supported
 	err = checkSupportedVersions(kubeClient, currentVersion, targetVersion, l)
 	if err != nil && !args.force {
