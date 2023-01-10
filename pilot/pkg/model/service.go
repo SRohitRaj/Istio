@@ -853,6 +853,11 @@ func (s *Service) GetExtraAddressesForProxy(node *Proxy) []string {
 			}
 		}
 	}
+
+	// return UnspecifiedIPv6 if the service is a service entry and default address is UnspecifiedIP
+	if s.Attributes.ServiceRegistry == provider.External && s.DefaultAddress == constants.UnspecifiedIP {
+		return []string{constants.UnspecifiedIPv6}
+	}
 	return nil
 }
 
