@@ -18,7 +18,9 @@
 package security
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pkg/test/echo/common/scheme"
@@ -428,6 +430,13 @@ func TestReachability(t *testing.T) {
 						Source(c.configs...).
 						BuildAll(nil, allServices).
 						Apply()
+
+						// Tests depend on exact config application (not eventually consistent).
+						// For slow builds, introduce an extra delay for xDS application.
+					if _, f := os.LookupEnv("ASAN_IMAGE"); f {
+						time.Sleep(15 * time.Second)
+					}
+
 					// Run the test against a number of ports.
 					allOpts := append([]echo.CallOptions{}, c.callOpts...)
 					if len(allOpts) == 0 {
