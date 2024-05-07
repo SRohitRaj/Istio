@@ -325,16 +325,6 @@ func (rb *IptablesRuleBuilder) BuildGuardrails() [][]string {
 	return output
 }
 
-func (rb *IptablesRuleBuilder) BuildCheckGuardrails() [][]string {
-	rules := checkRules(rb.buildGuardrails())
-	output := make([][]string, 0)
-	for _, r := range rules {
-		cmd := append([]string{"-t", r.table}, r.params...)
-		output = append(output, cmd)
-	}
-	return output
-}
-
 func (rb *IptablesRuleBuilder) BuildCleanupGuardrails() [][]string {
 	rules := reverseRules(rb.buildGuardrails())
 	output := make([][]string, 0)
