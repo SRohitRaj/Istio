@@ -196,7 +196,8 @@ func reverseRules(rules []*Rule) []*Rule {
 				modifiedParams = append(modifiedParams, element)
 			}
 
-			if ((element == "-A" || element == "--append") || (element == "-I" || element == "--insert")) && i < len(r.params)-1 && strings.HasPrefix(r.params[i+1], "ISTIO_") {
+			if ((element == "-A" || element == "--append") || (element == "-I" || element == "--insert")) &&
+				i < len(r.params)-1 && strings.HasPrefix(r.params[i+1], "ISTIO_") {
 				skip = true
 			} else if (element == "-j" || element == "--jump") && i < len(r.params)-1 && strings.HasPrefix(r.params[i+1], "ISTIO_") {
 				skip = false // Override previous skip if this is a jump-rule
@@ -280,38 +281,6 @@ func (rb *IptablesRuleBuilder) buildCleanupRules(rules []*Rule) [][]string {
 		}
 	}
 	return output
-}
-
-func (rb *IptablesRuleBuilder) buildCleanupRulesRestore(rules []*Rule) string {
-	newRules := make([]*Rule, len(rules))
-	for i := len(rules) - 1; i >= 0; i-- {
-		newRules[len(rules)-1-i] = rules[i]
-	}
-	reverseRules := reverseRules(newRules)
-	tableRulesMap := map[string][]string{
-		constants.FILTER: {},
-		constants.NAT:    {},
-		constants.MANGLE: {},
-	}
-
-	for _, r := range reverseRules {
-		tableRulesMap[r.table] = append(tableRulesMap[r.table], strings.Join(r.params, " "))
-	}
-
-	chainTableLookupMap := sets.New[string]()
-	for _, r := range newRules {
-		chainTable := fmt.Sprintf("%s:%s", r.chain, r.table)
-		// Delete chain if key: `chainTable` isn't present in map
-		if !chainTableLookupMap.Contains(chainTable) {
-			// Don't delete iptables built-in chains
-			if _, present := constants.BuiltInChainsMap[r.chain]; !present {
-				tableRulesMap[r.table] = append(tableRulesMap[r.table], fmt.Sprintf("-F %s", r.chain))
-				tableRulesMap[r.table] = append(tableRulesMap[r.table], fmt.Sprintf("-X %s", r.chain))
-				chainTableLookupMap.Insert(chainTable)
-			}
-		}
-	}
-	return rb.constructIptablesRestoreContents(tableRulesMap)
 }
 
 func (rb *IptablesRuleBuilder) buildGuardrails() []*Rule {

@@ -919,8 +919,8 @@ func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVe
 		if guardrails {
 			log.Info("Removing guardrails")
 			guardrailsCleanup := cfg.ruleBuilder.BuildCleanupGuardrails()
-			cfg.executeIptablesCommands(iptVer, guardrailsCleanup)
-			cfg.executeIptablesCommands(ipt6Ver, guardrailsCleanup)
+			_ = cfg.executeIptablesCommands(iptVer, guardrailsCleanup)
+			_ = cfg.executeIptablesCommands(ipt6Ver, guardrailsCleanup)
 		}
 	}()
 
@@ -933,14 +933,12 @@ func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVe
 			log.Info("Setting up guardrails")
 			guardrailsCleanup := cfg.ruleBuilder.BuildCleanupGuardrails()
 			guardrailsRules := cfg.ruleBuilder.BuildGuardrails()
-			cfg.tryExecuteIptablesCommands(iptVer, guardrailsCleanup)
-			cfg.tryExecuteIptablesCommands(ipt6Ver, guardrailsCleanup)
-			if err := cfg.executeIptablesCommands(iptVer, guardrailsRules); err != nil {
-				return err
-			}
-			guardrails = true
-			if err := cfg.executeIptablesCommands(ipt6Ver, guardrailsRules); err != nil {
-				return err
+			for _, ver := range []*dep.IptablesVersion{iptVer, ipt6Ver} {
+				cfg.tryExecuteIptablesCommands(ver, guardrailsCleanup)
+				if err := cfg.executeIptablesCommands(ver, guardrailsRules); err != nil {
+					return err
+				}
+				guardrails = true
 			}
 		}
 		// Remove old iptables
