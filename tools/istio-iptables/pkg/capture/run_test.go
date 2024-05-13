@@ -15,7 +15,9 @@
 package capture
 
 import (
+	"bytes"
 	"net/netip"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -349,7 +351,7 @@ func TestSeparateV4V6(t *testing.T) {
 	}
 }
 
-func TestIdempotentRerun(t *testing.T) {
+func TestIdempotentEquivalentRerun(t *testing.T) {
 	commonCases := getCommonTestCases()
 	ext := &dep.RealDependencies{
 		CNIMode:          false,
@@ -399,6 +401,75 @@ func TestIdempotentRerun(t *testing.T) {
 			// Second Pass
 			iptConfigurator = NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
+		})
+	}
+}
+
+func TestIdempotentUnequaledRerun(t *testing.T) {
+	commonCases := getCommonTestCases()
+	ext := &dep.RealDependencies{
+		CNIMode:          false,
+		NetworkNamespace: "",
+	}
+	iptVer, err := ext.DetectIptablesVersion(false)
+	if err != nil {
+		t.Fatalf("Can't detect iptables version")
+	}
+
+	ipt6Ver, err := ext.DetectIptablesVersion(true)
+	if err != nil {
+		t.Fatalf("Can't detect ip6tables version")
+	}
+
+	for _, tt := range commonCases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := constructTestConfig()
+			tt.config(cfg)
+			// Override UID and GID otherwise test will fail in the linux namespace from unshare-go lib
+			cfg.ProxyUID = "0"
+			cfg.ProxyGID = "0"
+			if cfg.OwnerGroupsExclude != "" {
+				cfg.OwnerGroupsInclude = "0"
+			}
+			if cfg.OwnerGroupsInclude != "" {
+				cfg.OwnerGroupsInclude = "0"
+			}
+
+			defer func() {
+				// Final Cleanup
+				cfg.CleanupOnly = true
+				iptConfigurator := NewIptablesConfigurator(cfg, ext)
+				assert.NoError(t, iptConfigurator.Run())
+				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+				assert.Equal(t, residueFound, false)
+				assert.Equal(t, applyRequired, true)
+			}()
+
+			// First Pass
+			iptConfigurator := NewIptablesConfigurator(cfg, ext)
+			assert.NoError(t, iptConfigurator.Run())
+			residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueFound, true)
+			assert.Equal(t, applyRequired, false)
+
+			// Diverge from installation
+			cmd := exec.Command("iptables", "-t", "nat", "-A", "ISTIO_INBOUND", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
+			}
+
+			// Cleanup is now required
+			residueFound, applyRequired = iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueFound, true)
+			assert.Equal(t, applyRequired, true)
+
+			// Second pass
+			iptConfigurator = NewIptablesConfigurator(cfg, ext)
+			assert.NoError(t, iptConfigurator.Run())
+
 		})
 	}
 }
