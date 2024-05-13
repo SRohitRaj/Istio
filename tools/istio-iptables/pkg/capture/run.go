@@ -872,10 +872,6 @@ check_loop:
 				continue
 			}
 			expectedState := cfg.getStateFromSave(ipCfg.expected)
-			if len(currentState) != len(expectedState) {
-				applyRequired = true
-				break
-			}
 			for table, chains := range expectedState {
 				_, ok := currentState[table]
 				if !ok {
@@ -883,8 +879,8 @@ check_loop:
 					break check_loop
 				}
 				for chain, rules := range chains {
-					_, ok := currentState[table][chain]
-					if !ok || len(rules) != len(currentState[table][chain]) {
+					currentRules, ok := currentState[table][chain]
+					if !ok || (strings.HasPrefix(chain, "ISTIO_") && len(rules) != len(currentRules)) {
 						applyRequired = true
 						break check_loop
 					}

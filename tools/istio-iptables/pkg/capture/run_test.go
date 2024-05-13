@@ -430,6 +430,7 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			// Override UID and GID otherwise test will fail in the linux namespace from unshare-go lib
 			cfg.ProxyUID = "0"
 			cfg.ProxyGID = "0"
+			var stdout, stderr bytes.Buffer
 			if cfg.OwnerGroupsExclude != "" {
 				cfg.OwnerGroupsInclude = "0"
 			}
@@ -444,8 +445,15 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
 				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
-				assert.Equal(t, residueFound, false)
+				assert.Equal(t, residueFound, true) // residue found due to extra OUTPUT rule
 				assert.Equal(t, applyRequired, true)
+				// Remove additional rule
+				cmd := exec.Command("iptables", "-t", "nat", "-D", "OUTPUT", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
+				cmd.Stdout = &stdout
+				cmd.Stderr = &stderr
+				if err := cmd.Run(); err != nil {
+					t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
+				}
 			}()
 
 			// First Pass
@@ -456,15 +464,26 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			assert.Equal(t, applyRequired, false)
 
 			// Diverge from installation
-			cmd := exec.Command("iptables", "-t", "nat", "-A", "ISTIO_INBOUND", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
-			var stdout, stderr bytes.Buffer
+			cmd := exec.Command("iptables", "-t", "nat", "-A", "OUTPUT", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
 				t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
 			}
 
-			// Cleanup is now required
+			// Apply not required after tainting non-ISTIO chains with extra rules
+			residueFound, applyRequired = iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueFound, true)
+			assert.Equal(t, applyRequired, false)
+
+			cmd = exec.Command("iptables", "-t", "nat", "-A", "ISTIO_INBOUND", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
+			}
+
+			// Apply required after tainting ISTIO chains
 			residueFound, applyRequired = iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
 			assert.Equal(t, residueFound, true)
 			assert.Equal(t, applyRequired, true)
