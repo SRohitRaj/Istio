@@ -927,7 +927,7 @@ func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVe
 	residueFound, applyRequired := cfg.VerifyRerunStatus(iptVer, ipt6Ver)
 
 	// Cleanup Step
-	if (residueFound && applyRequired) || cfg.cfg.CleanupOnly {
+	if (residueFound && applyRequired && !cfg.cfg.SkipCleanup) || cfg.cfg.CleanupOnly {
 		// Apply safety guardrails if not there
 		if residueFound {
 			log.Info("Setting up guardrails")

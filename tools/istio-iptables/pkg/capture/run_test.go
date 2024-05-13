@@ -384,6 +384,7 @@ func TestIdempotentEquivalentRerun(t *testing.T) {
 			defer func() {
 				// Final Cleanup
 				cfg.CleanupOnly = true
+				cfg.SkipCleanup = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
 				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
@@ -392,6 +393,7 @@ func TestIdempotentEquivalentRerun(t *testing.T) {
 			}()
 
 			// First Pass
+			cfg.SkipCleanup = true
 			iptConfigurator := NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
 			residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
@@ -438,6 +440,7 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			defer func() {
 				// Final Cleanup
 				cfg.CleanupOnly = true
+				cfg.SkipCleanup = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
 				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
@@ -466,10 +469,15 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			assert.Equal(t, residueFound, true)
 			assert.Equal(t, applyRequired, true)
 
-			// Second pass
+			// Fail is expected if cleanup is skipped
+			cfg.SkipCleanup = true
+			iptConfigurator = NewIptablesConfigurator(cfg, ext)
+			assert.Error(t, iptConfigurator.Run())
+
+			// Second pass with cleanup
+			cfg.SkipCleanup = false
 			iptConfigurator = NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
-
 		})
 	}
 }
