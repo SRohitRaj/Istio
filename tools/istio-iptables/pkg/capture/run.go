@@ -909,9 +909,9 @@ check_loop:
 	}
 
 	if deltaExists && !reconcile {
-		log.Info("Found compatible iptables rules/chains, no reconciliation needed")
+		log.Warn("Found compatible iptables rules/chains, no reconciliation needed")
 	} else if deltaExists {
-		log.Info("Found residue of old iptables rules/chains, reconciliation is needed")
+		log.Warn("Found residue of old iptables rules/chains, reconciliation is needed")
 	}
 
 	return deltaExists, reconcile
