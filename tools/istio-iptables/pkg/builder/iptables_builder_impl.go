@@ -286,8 +286,11 @@ func (rb *IptablesRuleBuilder) buildCleanupRules(rules []*Rule) [][]string {
 func (rb *IptablesRuleBuilder) buildGuardrails() []*Rule {
 	rules := make([]*Rule, 0)
 	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.INPUT, constants.FILTER, 1, "-p", "tcp", "-j", "DROP")
+	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.INPUT, constants.FILTER, 1, "-p", "udp", "-j", "DROP")
 	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.FORWARD, constants.FILTER, 1, "-p", "tcp", "-j", "DROP")
+	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.FORWARD, constants.FILTER, 1, "-p", "udp", "-j", "DROP")
 	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.OUTPUT, constants.FILTER, 1, "-p", "tcp", "-j", "DROP")
+	rb.insertInternal(&rules, iptableslog.UndefinedCommand, constants.OUTPUT, constants.FILTER, 1, "-p", "udp", "-j", "DROP")
 	return rules
 }
 
