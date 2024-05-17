@@ -849,8 +849,8 @@ func (cfg *IptablesConfigurator) getStateFromSave(data string) map[string]map[st
 
 func (cfg *IptablesConfigurator) VerifyIptablesState(iptVer, ipt6Ver *dep.IptablesVersion) (bool, bool) {
 	// These variables track the status of iptables installation
-	deltaExists := false // Flag to indicate if a difference is found between expected and current state
-	reconcile := false   // Flag to indicate if a reconciliation via cleanup is needed
+	residueExists := false // Flag to indicate if iptables residues from previous executions are found
+	deltaExists := false   // Flag to indicate if a difference is found between expected and current state
 
 check_loop:
 	for _, ipCfg := range []struct {
@@ -866,12 +866,12 @@ check_loop:
 			currentState := cfg.getStateFromSave(output.String())
 			log.Debugf("Current iptables state: %s", currentState)
 			for _, value := range currentState {
-				if deltaExists {
+				if residueExists {
 					break
 				}
-				deltaExists = len(value) != 0
+				residueExists = len(value) != 0
 			}
-			if !deltaExists {
+			if !residueExists {
 				continue
 			}
 			expectedState := cfg.getStateFromSave(ipCfg.expected)
@@ -879,14 +879,14 @@ check_loop:
 			for table, chains := range expectedState {
 				_, ok := currentState[table]
 				if !ok {
-					reconcile = true
+					deltaExists = true
 					log.Debugf("Can't find expected table %s in current state", table)
 					break check_loop
 				}
 				for chain, rules := range chains {
 					currentRules, ok := currentState[table][chain]
 					if !ok || (strings.HasPrefix(chain, "ISTIO_") && len(rules) != len(currentRules)) {
-						reconcile = true
+						deltaExists = true
 						log.Debugf("Mismatching number of rules in chain %s between current and expected state", chain)
 						break check_loop
 					}
@@ -894,7 +894,7 @@ check_loop:
 			}
 			err = cfg.executeIptablesCommands(ipCfg.ver, ipCfg.checkRules)
 			if err != nil {
-				reconcile = true
+				deltaExists = true
 				log.Debugf("iptables check rules failed")
 				break
 			}
@@ -902,19 +902,18 @@ check_loop:
 
 	}
 
-	// If no delta is found, reconcile is never needed
-	if !deltaExists {
-		log.Info("Clean-state detected, no reconciliation needed")
-		return false, false
+	if !residueExists {
+		log.Info("Clean-state detected, new iptables are needed")
+		return false, true
 	}
 
-	if deltaExists && !reconcile {
-		log.Warn("Found compatible iptables rules/chains, no reconciliation needed")
-	} else if deltaExists {
-		log.Warn("Found residue of old iptables rules/chains, reconciliation is needed")
+	if deltaExists {
+		log.Warn("Found residues of old iptables rules/chains, reconciliation is needed")
+	} else {
+		log.Warn("Found compatible residues of old iptables rules/chains, reconciliation not needed")
 	}
 
-	return deltaExists, reconcile
+	return residueExists, deltaExists
 }
 
 func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVersion) error {
@@ -928,14 +927,14 @@ func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVe
 		}
 	}()
 
-	deltaExists, reconcile := cfg.VerifyIptablesState(iptVer, ipt6Ver)
-	if deltaExists && reconcile && cfg.cfg.NoReconcile {
+	residueExists, deltaExists := cfg.VerifyIptablesState(iptVer, ipt6Ver)
+	if residueExists && deltaExists && cfg.cfg.NoReconcile {
 		return fmt.Errorf("reconcile is needed but no-reconcile flag is set. Can't recover from this state")
 	}
 	// Cleanup Step
-	if (deltaExists && reconcile) || cfg.cfg.CleanupOnly {
+	if (residueExists && deltaExists) || cfg.cfg.CleanupOnly {
 		// Apply safety guardrails
-		if deltaExists {
+		if !cfg.cfg.CleanupOnly {
 			log.Info("Setting up guardrails")
 			guardrailsCleanup := cfg.ruleBuilder.BuildCleanupGuardrails()
 			guardrailsRules := cfg.ruleBuilder.BuildGuardrails()
@@ -954,7 +953,7 @@ func (cfg *IptablesConfigurator) executeCommands(iptVer, ipt6Ver *dep.IptablesVe
 	}
 
 	// Apply Step
-	if (reconcile || !deltaExists) && !cfg.cfg.CleanupOnly {
+	if deltaExists && !cfg.cfg.CleanupOnly {
 		log.Info("Applying iptables chains and rules")
 		if cfg.cfg.RestoreFormat {
 			// Execute iptables-restore

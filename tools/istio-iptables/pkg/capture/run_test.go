@@ -387,18 +387,18 @@ func TestIdempotentEquivalentRerun(t *testing.T) {
 				cfg.NoReconcile = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
-				deltaExists, reconcile := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-				assert.Equal(t, deltaExists, false)
-				assert.Equal(t, reconcile, false)
+				residueExists, deltaExists := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+				assert.Equal(t, residueExists, false)
+				assert.Equal(t, deltaExists, true)
 			}()
 
 			// First Pass
 			cfg.NoReconcile = true
 			iptConfigurator := NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
-			deltaExists, reconcile := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-			assert.Equal(t, deltaExists, true)
-			assert.Equal(t, reconcile, false)
+			residueExists, deltaExists := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueExists, true)
+			assert.Equal(t, deltaExists, false)
 
 			// Second Pass
 			iptConfigurator = NewIptablesConfigurator(cfg, ext)
@@ -444,9 +444,9 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 				cfg.NoReconcile = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
-				residueFound, applyRequired := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-				assert.Equal(t, residueFound, true) // residue found due to extra OUTPUT rule
-				assert.Equal(t, applyRequired, true)
+				residueExists, deltaExists := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+				assert.Equal(t, residueExists, true) // residue found due to extra OUTPUT rule
+				assert.Equal(t, deltaExists, true)
 				// Remove additional rule
 				cmd := exec.Command("iptables", "-t", "nat", "-D", "OUTPUT", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
 				cmd.Stdout = &stdout
@@ -454,17 +454,17 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 				if err := cmd.Run(); err != nil {
 					t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
 				}
-				residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-				assert.Equal(t, residueFound, false)
-				assert.Equal(t, applyRequired, false)
+				residueExists, deltaExists = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+				assert.Equal(t, residueExists, false)
+				assert.Equal(t, deltaExists, true)
 			}()
 
 			// First Pass
 			iptConfigurator := NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
-			residueFound, applyRequired := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-			assert.Equal(t, residueFound, true)
-			assert.Equal(t, applyRequired, false)
+			residueExists, deltaExists := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueExists, true)
+			assert.Equal(t, deltaExists, false)
 
 			// Diverge from installation
 			cmd := exec.Command("iptables", "-t", "nat", "-A", "OUTPUT", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
@@ -475,9 +475,9 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			}
 
 			// Apply not required after tainting non-ISTIO chains with extra rules
-			residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-			assert.Equal(t, residueFound, true)
-			assert.Equal(t, applyRequired, false)
+			residueExists, deltaExists = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueExists, true)
+			assert.Equal(t, deltaExists, false)
 
 			cmd = exec.Command("iptables", "-t", "nat", "-A", "ISTIO_INBOUND", "-p", "tcp", "--dport", "123", "-j", "ACCEPT")
 			cmd.Stdout = &stdout
@@ -487,9 +487,9 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			}
 
 			// Apply required after tainting ISTIO chains
-			residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
-			assert.Equal(t, residueFound, true)
-			assert.Equal(t, applyRequired, true)
+			residueExists, deltaExists = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+			assert.Equal(t, residueExists, true)
+			assert.Equal(t, deltaExists, true)
 
 			// Fail is expected if cleanup is skipped
 			cfg.NoReconcile = true
