@@ -387,18 +387,18 @@ func TestIdempotentEquivalentRerun(t *testing.T) {
 				cfg.NoReconcile = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
-				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
-				assert.Equal(t, residueFound, false)
-				assert.Equal(t, applyRequired, true)
+				deltaExists, reconcile := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+				assert.Equal(t, deltaExists, false)
+				assert.Equal(t, reconcile, false)
 			}()
 
 			// First Pass
 			cfg.NoReconcile = true
 			iptConfigurator := NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
-			residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
-			assert.Equal(t, residueFound, true)
-			assert.Equal(t, applyRequired, false)
+			deltaExists, reconcile := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+			assert.Equal(t, deltaExists, true)
+			assert.Equal(t, reconcile, false)
 
 			// Second Pass
 			iptConfigurator = NewIptablesConfigurator(cfg, ext)
@@ -444,7 +444,7 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 				cfg.NoReconcile = false
 				iptConfigurator := NewIptablesConfigurator(cfg, ext)
 				assert.NoError(t, iptConfigurator.Run())
-				residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+				residueFound, applyRequired := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
 				assert.Equal(t, residueFound, true) // residue found due to extra OUTPUT rule
 				assert.Equal(t, applyRequired, true)
 				// Remove additional rule
@@ -454,12 +454,15 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 				if err := cmd.Run(); err != nil {
 					t.Errorf("iptables cmd (%s %s) failed: %s", cmd.Path, cmd.Args, stderr.String())
 				}
+				residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
+				assert.Equal(t, residueFound, false)
+				assert.Equal(t, applyRequired, false)
 			}()
 
 			// First Pass
 			iptConfigurator := NewIptablesConfigurator(cfg, ext)
 			assert.NoError(t, iptConfigurator.Run())
-			residueFound, applyRequired := iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			residueFound, applyRequired := iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
 			assert.Equal(t, residueFound, true)
 			assert.Equal(t, applyRequired, false)
 
@@ -472,7 +475,7 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			}
 
 			// Apply not required after tainting non-ISTIO chains with extra rules
-			residueFound, applyRequired = iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
 			assert.Equal(t, residueFound, true)
 			assert.Equal(t, applyRequired, false)
 
@@ -484,7 +487,7 @@ func TestIdempotentUnequaledRerun(t *testing.T) {
 			}
 
 			// Apply required after tainting ISTIO chains
-			residueFound, applyRequired = iptConfigurator.VerifyRerunStatus(&iptVer, &ipt6Ver)
+			residueFound, applyRequired = iptConfigurator.VerifyIptablesState(&iptVer, &ipt6Ver)
 			assert.Equal(t, residueFound, true)
 			assert.Equal(t, applyRequired, true)
 
