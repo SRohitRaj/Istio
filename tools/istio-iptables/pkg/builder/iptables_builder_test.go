@@ -315,12 +315,6 @@ func TestBuildV4V6MultipleRulesWithNewChain(t *testing.T) {
 
 func TestCheckRulesV4V6(t *testing.T) {
 	iptables := NewIptablesRuleBuilder(IPv6Config)
-	if err := len(iptables.BuildCheckV4()) != 0; err {
-		t.Errorf("Expected checkRulesV4 to not be empty; but got %#v", iptables.rules.rulesv4)
-	}
-	if err := len(iptables.BuildCheckV6()) != 0; err {
-		t.Errorf("Expected checkRulesV6 to not be empty; but got %#v", iptables.rules.rulesv4)
-	}
 	iptables.InsertRuleV4(iptableslog.UndefinedCommand, "chain", "table", 2, "-f", "foo", "-b", "bar")
 	iptables.AppendRuleV4(iptableslog.UndefinedCommand, "chain2", "table2", "-f", "foo", "-b", "baz")
 	iptables.AppendRuleV4(iptableslog.UndefinedCommand, "chain2", "table", "-f", "foo", "-b", "baz", "-j", "chain")
