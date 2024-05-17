@@ -312,3 +312,39 @@ func TestBuildV4V6MultipleRulesWithNewChain(t *testing.T) {
 		t.Errorf("Actual and expected output mismatch; but instead got Actual: %#v ; Expected: %#v", actualV6, expectedV6)
 	}
 }
+
+func TestCheckRulesV4V6(t *testing.T) {
+	iptables := NewIptablesRuleBuilder(IPv6Config)
+	if err := len(iptables.BuildCheckV4()) != 0; err {
+		t.Errorf("Expected checkRulesV4 to not be empty; but got %#v", iptables.rules.rulesv4)
+	}
+	if err := len(iptables.BuildCheckV6()) != 0; err {
+		t.Errorf("Expected checkRulesV6 to not be empty; but got %#v", iptables.rules.rulesv4)
+	}
+	iptables.InsertRuleV4(iptableslog.UndefinedCommand, "chain", "table", 2, "-f", "foo", "-b", "bar")
+	iptables.AppendRuleV4(iptableslog.UndefinedCommand, "chain2", "table2", "-f", "foo", "-b", "baz")
+	iptables.AppendRuleV4(iptableslog.UndefinedCommand, "chain2", "table", "-f", "foo", "-b", "baz", "-j", "chain")
+	iptables.InsertRuleV6(iptableslog.UndefinedCommand, "chain", "table", 3, "-f", "foo", "-b", "baar")
+	iptables.AppendRuleV6(iptableslog.UndefinedCommand, "chain2", "table2", "-f", "foo", "-b", "baaz")
+	iptables.AppendRuleV6(iptableslog.UndefinedCommand, "chain2", "table", "-f", "foo", "-b", "baaz", "-j", "chain")
+
+	actual := iptables.BuildCheckV4()
+	expected := [][]string{
+		{"-t", "table", "-C", "chain", "-f", "foo", "-b", "bar"},
+		{"-t", "table2", "-C", "chain2", "-f", "foo", "-b", "baz"},
+		{"-t", "table", "-C", "chain2", "-f", "foo", "-b", "baz", "-j", "chain"},
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Actual and expected output mismatch; but instead got Actual: %#v ; Expected: %#v", actual, expected)
+	}
+	actual = iptables.BuildCheckV6()
+	expected = [][]string{
+		{"-t", "table", "-C", "chain", "-f", "foo", "-b", "baar"},
+		{"-t", "table2", "-C", "chain2", "-f", "foo", "-b", "baaz"},
+		{"-t", "table", "-C", "chain2", "-f", "foo", "-b", "baaz", "-j", "chain"},
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Actual and expected output mismatch; but instead got Actual: %#v ; Expected: %#v", actual, expected)
+	}
+}
+
