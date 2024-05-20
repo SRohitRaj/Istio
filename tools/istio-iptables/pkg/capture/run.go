@@ -18,8 +18,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/vishvananda/netlink"
@@ -770,32 +768,27 @@ func (cfg *IptablesConfigurator) executeIptablesRestoreCommand(iptVer *dep.Iptab
 
 func (cfg *IptablesConfigurator) getStateFromSave(data string) map[string]map[string][]string {
 	lines := strings.Split(data, "\n")
-	type ParsedCmd struct {
-		flag  string
-		value string
-	}
 	result := make(map[string]map[string][]string)
 	for _, defaultTable := range []string{constants.FILTER, constants.NAT, constants.MANGLE, constants.RAW} {
 		result[defaultTable] = make(map[string][]string)
 	}
 
-	// Regex to match a flag (-<name>) and its value. Both are captured into two different groups.
-	flagRegex := regexp.MustCompile(`-([^\s]+)(?:\s+([^-\s]+))?`)
-
 	table := ""
-
+	chain := ""
 	for _, line := range lines {
-		chain := ""
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		if strings.HasPrefix(line, "#") || line == "COMMIT" {
 			continue
 		}
+		// Found table
 		if strings.HasPrefix(line, "*") {
+			chain = ""
 			table = strings.TrimSpace(line[1:])
 			continue
 		}
+		// Found chain, setup an empty list for the chain if it is an ISTIO one
 		if strings.HasPrefix(line, ":") {
 			if !strings.HasPrefix(line, ":ISTIO") {
 				continue
@@ -807,42 +800,27 @@ func (cfg *IptablesConfigurator) getStateFromSave(data string) map[string]map[st
 			}
 			continue
 		}
-		matches := flagRegex.FindAllStringSubmatch(line, -1)
-		flagsAndValues := []ParsedCmd{}
-		for _, match := range matches {
-			toAdd := ParsedCmd{}
-			toAdd.flag = match[1]
-			if len(match) > 2 && match[2] != "" {
-				toAdd.value = match[2]
-			}
-			flagsAndValues = append(flagsAndValues, toAdd)
-		}
-		for _, el := range flagsAndValues {
-			if el.flag == "A" || el.flag == "-append" || el.flag == "I" || el.flag == "-insert" {
-				chain = el.value
-				break
-			}
-		}
+
+		rule := strings.Split(line, " ")
+		ruleChain := ""
 		if chain == "" {
+			// Obtain chain from the rule in case we are parsing iptables-restore builder input
+			for i, item := range rule {
+				if (item == "--append" || item == "-A" || item == "--insert" || item == "-I") && i+1 < len(rule) {
+					ruleChain = rule[i+1]
+				}
+			}
+		} else {
+			ruleChain = chain
+		}
+		if ruleChain == "" {
 			continue
 		}
-
-		// Construct the sorted rule
-		var sortedRule string
-		sort.Slice(flagsAndValues, func(i, j int) bool {
-			return flagsAndValues[i].flag < flagsAndValues[j].flag
-		})
-		for _, fv := range flagsAndValues {
-			sortedRule += fmt.Sprintf("-%s %s ", fv.flag, fv.value)
-		}
-		sortedRule = strings.TrimSpace(sortedRule)
-
-		_, ok := result[table][chain]
+		_, ok := result[table][ruleChain]
 		if !ok {
-			result[table][chain] = []string{}
+			result[table][ruleChain] = []string{}
 		}
-		result[table][chain] = append(result[table][chain], sortedRule)
-
+		result[table][ruleChain] = append(result[table][ruleChain], line)
 	}
 	return result
 }
@@ -864,7 +842,7 @@ check_loop:
 		output, err := cfg.ext.RunWithOutput(constants.IPTablesSave, ipCfg.ver, nil)
 		if err == nil {
 			currentState := cfg.getStateFromSave(output.String())
-			log.Debugf("Current iptables state: %s", currentState)
+			log.Debugf("Current iptables state: %#v", currentState)
 			for _, value := range currentState {
 				if residueExists {
 					break
@@ -875,7 +853,7 @@ check_loop:
 				continue
 			}
 			expectedState := cfg.getStateFromSave(ipCfg.expected)
-			log.Debugf("Expected iptables state: %s", expectedState)
+			log.Debugf("Expected iptables state: %#v", expectedState)
 			for table, chains := range expectedState {
 				_, ok := currentState[table]
 				if !ok {
