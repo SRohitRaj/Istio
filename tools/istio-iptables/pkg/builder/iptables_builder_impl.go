@@ -184,23 +184,29 @@ func reverseRules(rules []*Rule) []*Rule {
 		skip := false
 		insertIndex := -1
 		for i, element := range r.params {
+			// insert index of a previous -I flag must be skipped
 			if insertIndex >= 0 && i == insertIndex+2 {
 				continue
 			}
 			if element == "-A" || element == "--append" {
+				// -A/--append is transformed to -D
 				modifiedParams = append(modifiedParams, "-D")
 			} else if element == "-I" || element == "--insert" {
+				// -I/--insert is transformed to -D, insert index at i+2 must be skipped
 				insertIndex = i
 				modifiedParams = append(modifiedParams, "-D")
 			} else {
+				// Every other flag/value is kept as it is
 				modifiedParams = append(modifiedParams, element)
 			}
 
 			if ((element == "-A" || element == "--append") || (element == "-I" || element == "--insert")) &&
 				i < len(r.params)-1 && strings.HasPrefix(r.params[i+1], "ISTIO_") {
+				// Ignore every non-jump rule in ISTIO_* chains as we will flush the chain anyway
 				skip = true
 			} else if (element == "-j" || element == "--jump") && i < len(r.params)-1 && strings.HasPrefix(r.params[i+1], "ISTIO_") {
-				skip = false // Override previous skip if this is a jump-rule
+				// Override previous skip if this is a jump-rule
+				skip = false
 			}
 		}
 		if skip {
@@ -223,15 +229,19 @@ func checkRules(rules []*Rule) []*Rule {
 		var modifiedParams []string
 		insertIndex := -1
 		for i, element := range r.params {
+			// insert index of a previous -I flag must be skipped
 			if insertIndex >= 0 && i == insertIndex+2 {
 				continue
 			}
 			if element == "-A" || element == "--append" {
+				// -A/--append is transformed to -D
 				modifiedParams = append(modifiedParams, "-C")
 			} else if element == "-I" || element == "--insert" {
+				// -I/--insert is transformed to -D, insert index at i+2 must be skipped
 				insertIndex = i
 				modifiedParams = append(modifiedParams, "-C")
 			} else {
+				// Every other flag/value is kept as it is
 				modifiedParams = append(modifiedParams, element)
 			}
 		}
