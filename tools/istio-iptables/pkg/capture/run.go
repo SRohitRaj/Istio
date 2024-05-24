@@ -766,6 +766,10 @@ func (cfg *IptablesConfigurator) executeIptablesRestoreCommand(iptVer *dep.Iptab
 	return cfg.ext.Run(constants.IPTablesRestore, iptVer, strings.NewReader(data), "--noflush")
 }
 
+// getStateFromSave function takes a string in iptables-restore format and returns a map of the tables, chains, and rules.
+// Note that if this function is used to parse iptables-save output, the rules may have changed since they were first applied
+// as rules do not necessarily undergo a round-trip through the kernel in the same form.
+// Therefore, these rules should not be used for any critical checks.
 func (cfg *IptablesConfigurator) getStateFromSave(data string) map[string]map[string][]string {
 	lines := strings.Split(data, "\n")
 	result := make(map[string]map[string][]string)
@@ -825,6 +829,16 @@ func (cfg *IptablesConfigurator) getStateFromSave(data string) map[string]map[st
 	return result
 }
 
+// VerifyIptablesState function verifies the current iptables state against the expected state.
+// The current state is considered equal to the expected state if the following three conditions are met:
+//   - Every ISTIO_* chain in the expected state must also exist in the current state.
+//   - Every ISTIO_* chain must have the same number of elements in both the current and expected state.
+//   - Every rule in the expected state (whether it is in an ISTIO or non-ISTIO chain) must also exist in the current state.
+//     The verification is performed by using "iptables -C" on the rule produced by our iptables builder. No comparison of the parsed rules is done.
+//
+// Note: The order of the rules is not checked and is not used to determine the equivalence of the two states.
+// The function returns two boolean values, the first one indicates whether residues exist,
+// and the second one indicates whether differences were found between the current and expected state.
 func (cfg *IptablesConfigurator) VerifyIptablesState(iptVer, ipt6Ver *dep.IptablesVersion) (bool, bool) {
 	// These variables track the status of iptables installation
 	residueExists := false // Flag to indicate if iptables residues from previous executions are found
