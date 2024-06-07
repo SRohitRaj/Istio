@@ -492,6 +492,18 @@ func compareVersion(ov, nv int) int {
 
 var NodeTypes = [...]NodeType{SidecarProxy, Router, Waypoint, Ztunnel}
 
+func (node *Proxy) FirstAddressOrNil() string {
+	if node == nil {
+		return ""
+	}
+
+	if len(node.IPAddresses) == 0 {
+		return ""
+	}
+
+	return node.IPAddresses[0]
+}
+
 // SetSidecarScope identifies the sidecar scope object associated with this
 // proxy and updates the proxy Node. This is a convenience hack so that
 // callers can simply call push.Services(node) while the implementation of
