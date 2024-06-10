@@ -99,6 +99,8 @@ data:
       version_label: v1.82.0
       view_only_mode: false
     external_services:
+      prometheus:
+        url: http://prometheus.aks-istio-system:9090
       custom_dashboards:
         enabled: true
       istio:
